@@ -14,6 +14,7 @@ import Gradient from 'javascript-color-gradient';
 import { UIMillStorage } from '../../services/uiMillStorage';
 import currencyToSymbolMap from 'currency-symbol-map/map';
 import { CurrencyService } from '../../services/currencyService/currency.service';
+import { Bean } from 'src/classes/bean/bean';
 @Component({
   selector: 'statistic',
   templateUrl: './statistic.page.html',
@@ -43,6 +44,13 @@ export class StatisticPage implements OnInit {
 
   public currencies = currencyToSymbolMap;
   public segment: string = 'GENERAL';
+
+  private chartDataCache: {
+    beans: Bean[];
+    uniqueCountries: string[];
+    uniqueRoasters: string[];
+  };
+
   constructor(
     public uiStatistic: UIStatistic,
     private readonly uiBrewStorage: UIBrewStorage,
@@ -80,14 +88,7 @@ export class StatisticPage implements OnInit {
   private __loadAvgBeanRatingByCountryChart(): void {
     const brews = this.uiBrewStorage.getAllEntries();
     const beans = this.__getBeansFromBrews(brews);
-    const countries = Array.from(
-      new Set(
-        beans
-          .map((b) => b.bean_information.map((info) => info.country))
-          .reduce((acc, val) => acc.concat(val), [])
-          .filter((c) => c),
-      ),
-    );
+
     const data = {
       labels: [],
       datasets: [
@@ -99,7 +100,8 @@ export class StatisticPage implements OnInit {
         },
       ],
     };
-    for (const country of countries) {
+
+    for (const country of this.chartDataCache.uniqueCountries) {
       const beansForCountry = beans.filter((b) =>
         b.bean_information.some((info) => info.country === country),
       );
@@ -128,15 +130,10 @@ export class StatisticPage implements OnInit {
           },
         },
       },
-    } as any);
+    });
   }
 
   private __loadBeansByRoasterChart(): void {
-    const beans = this.uiBeanStorage.getAllEntries();
-    const roasters = Array.from(
-      new Set(beans.map((b) => b.roaster).filter((r) => r)),
-    );
-
     const data = {
       labels: [],
       datasets: [
@@ -148,12 +145,13 @@ export class StatisticPage implements OnInit {
       ],
     };
 
-    for (const roaster of roasters) {
+    for (const roaster of this.chartDataCache.uniqueRoasters) {
       if (!roaster) continue;
       data.labels.push(roaster);
-      data.datasets[0].data.push(
-        beans.filter((b) => b.roaster === roaster).length,
+      const beansByRoaster = this.chartDataCache.beans.filter(
+        (b) => b.roaster === roaster,
       );
+      data.datasets[0].data.push(beansByRoaster.length);
     }
 
     const colorGradient = new Gradient()
@@ -174,14 +172,13 @@ export class StatisticPage implements OnInit {
           },
         },
       },
-    } as any);
+    });
   }
 
   private __loadBeansByProcessingChart(): void {
-    const beans = this.uiBeanStorage.getAllEntries();
     const processings = Array.from(
       new Set(
-        beans
+        this.chartDataCache.beans
           .map((b) => b.bean_information.map((info) => info.processing))
           .reduce((acc, val) => acc.concat(val), [])
           .filter((p) => p),
@@ -203,7 +200,7 @@ export class StatisticPage implements OnInit {
       if (!processing) continue;
       data.labels.push(processing);
       data.datasets[0].data.push(
-        beans.filter((b) =>
+        this.chartDataCache.beans.filter((b) =>
           b.bean_information.some((info) => info.processing === processing),
         ).length,
       );
@@ -231,16 +228,6 @@ export class StatisticPage implements OnInit {
   }
 
   private __loadBeansByCountryChart(): void {
-    const beans = this.uiBeanStorage.getAllEntries();
-    const countries = Array.from(
-      new Set(
-        beans
-          .map((b) => b.bean_information.map((info) => info.country))
-          .reduce((acc, val) => acc.concat(val), [])
-          .filter((c) => c),
-      ),
-    );
-
     const data = {
       labels: [],
       datasets: [
@@ -252,14 +239,13 @@ export class StatisticPage implements OnInit {
       ],
     };
 
-    for (const country of countries) {
+    for (const country of this.chartDataCache.uniqueCountries) {
       if (!country) continue;
       data.labels.push(country);
-      data.datasets[0].data.push(
-        beans.filter((b) =>
-          b.bean_information.some((info) => info.country === country),
-        ).length,
+      const beansByCountry = this.chartDataCache.beans.filter((b) =>
+        b.bean_information.some((info) => info.country === country),
       );
+      data.datasets[0].data.push(beansByCountry.length);
     }
 
     const colorGradient = new Gradient()
@@ -280,7 +266,7 @@ export class StatisticPage implements OnInit {
           },
         },
       },
-    } as any);
+    });
   }
 
   private __getBeansFromBrews(brews: Brew[]): any[] {
@@ -309,7 +295,37 @@ export class StatisticPage implements OnInit {
     }, 250);
   }
 
-  public ngOnInit() {}
+  public ngOnInit() {
+    const beans = this.uiBeanStorage.getAllEntries();
+
+    const [uniqueCountries, uniqueRoasters] =
+      this.__getUniqueCountriesAndRoasters(beans);
+
+    this.chartDataCache = {
+      beans,
+      uniqueCountries,
+      uniqueRoasters,
+    };
+  }
+
+  private __getUniqueCountriesAndRoasters(beans: Bean[]) {
+    const countries = new Set<string>();
+    const roasters = new Set<string>();
+
+    for (const bean of beans) {
+      if (bean.roaster) {
+        roasters.add(bean.roaster);
+      }
+
+      for (const info of bean.bean_information) {
+        if (info.country) {
+          countries.add(info.country);
+        }
+      }
+    }
+
+    return [Array.from(countries), Array.from(roasters)];
+  }
 
   private __getBrewsSortedForMonth(): Array<BrewView> {
     const brewViews: Array<BrewView> = [];
